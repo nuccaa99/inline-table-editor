@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { FormBuilder, Validators } from '@angular/forms';
 import { User } from 'src/models/Users';
+import { ApiService } from './services/api.service';
 
 @Component({
   selector: 'app-root',
@@ -8,7 +9,15 @@ import { User } from 'src/models/Users';
   styleUrls: ['./app.component.css'],
 })
 export class AppComponent {
-  constructor(private fb: FormBuilder) {}
+  constructor(private fb: FormBuilder, private apiService: ApiService) {}
+
+  public users: User[] = [];
+
+  ngOnInit() {
+    this.apiService.getUsers().subscribe((data) => {
+      this.users = data.users;
+    });
+  }
 
   isEditing: boolean = false;
 
@@ -27,42 +36,80 @@ export class AppComponent {
     );
   }
 
-  addUser() {
-    this.users.unshift({
-      id: '-',
-      firstName: '',
-      lastName: '',
-      email: '',
+  addNewUser(userData: Partial<User>) {
+    const tempId = this.generateId();
+
+    const newUser: User = {
+      id: this.generateId(),
+      firstName: userData.firstName || '',
+      lastName: userData.lastName || '',
+      email: userData.email || '',
+    };
+
+    this.users.unshift(newUser);
+
+    this.apiService.addUser(newUser).subscribe({
+      next: (apiResponse) => {
+        const index = this.users.findIndex((u) => u.id === tempId);
+        if (index !== -1) {
+          this.users[index] = apiResponse;
+        }
+      },
+      error: (error) => {
+        console.error('Error adding user', error);
+        this.users.shift();
+      },
     });
-    this.userSelected = this.users[0];
   }
 
   deleteUser(index: number) {
     if (confirm('Are you sure you want to delete this user?')) {
-      this.users.splice(index, 1);
+      const userToDelete = this.users[index];
+
+      this.apiService.deleteUser(userToDelete.id).subscribe({
+        next: () => {
+          this.users.splice(index, 1);
+        },
+        error: (error) => {
+          console.error('Error deleting user', error);
+        },
+      });
     }
   }
 
   update() {
-    if (!this.isEditing) {
-      this.users[0] = {
-        id: this.generateId(),
+    if (this.form.valid) {
+      const updatedUser = {
         firstName: this.form.value.firstName!,
         lastName: this.form.value.lastName!,
         email: this.form.value.email!,
       };
-    }
-    let index = this.users.map((u) => u.id).indexOf(this.userSelected.id);
-    this.users[index] = {
-      id: this.userSelected.id,
-      firstName: this.form.value.firstName!,
-      lastName: this.form.value.lastName!,
-      email: this.form.value.email!,
-    };
 
-    this.userSelected = {} as User;
-    this.isEditing = false;
-    this.form.reset();
+      if (this.isEditing && this.userSelected) {
+        const userId = this.userSelected.id;
+        this.apiService.updateUser(userId, updatedUser).subscribe({
+          next: (updatedUser) => {
+            const index = this.users.findIndex((u) => u.id === userId);
+
+            if (index !== -1) {
+              this.users[index] = {
+                ...this.users[index],
+                ...updatedUser,
+              };
+            }
+
+            this.userSelected = {} as User;
+            this.isEditing = false;
+            this.form.reset();
+          },
+          error: (error) => {
+            console.error('Error updating user', error);
+          },
+        });
+      } else {
+        this.addNewUser(updatedUser);
+      }
+    }
   }
 
   cancel() {
@@ -90,56 +137,4 @@ export class AppComponent {
       });
     }
   }
-
-  users: User[] = [
-    {
-      id: '67a31d091c54eecfe9dea1ba',
-      firstName: 'Elba',
-      lastName: 'Smith',
-      email: 'elbasmith@nimon.com',
-    },
-    {
-      id: '67a31d09392af9c3adaf6458',
-      firstName: 'Rodgers',
-      lastName: 'Sherman',
-      email: 'rodgerssherman@nimon.com',
-    },
-    {
-      id: '67a31d0974637527cf97bd67',
-      firstName: 'Genevieve',
-      lastName: 'Blankenship',
-      email: 'genevieveblankenship@nimon.com',
-    },
-    {
-      id: '67a31d09b372945704fcfdaa',
-      firstName: 'Solomon',
-      lastName: 'Farmer',
-      email: 'solomonfarmer@nimon.com',
-    },
-    {
-      id: '67a31d0933eaa54ebbd543de',
-      firstName: 'Augusta',
-      lastName: 'Grant',
-      email: 'augustagrant@nimon.com',
-    },
-    {
-      id: '67a31d093b56f55ed18f2aa0',
-      firstName: 'Jaclyn',
-      lastName: 'Noble',
-      email: 'jaclynnoble@nimon.com',
-    },
-    {
-      id: '67a31d09dc96a28ca1135329',
-      firstName: 'Rivera',
-      lastName: 'Diaz',
-      email: 'riveradiaz@nimon.com',
-    },
-    {
-      id: '67a31d0964c3e12c7765981a',
-      firstName: 'Frederick',
-      lastName: 'Blanchard',
-      email: 'frederickblanchard@nimon.com',
-    },
-  ];
-  title = 'inline-table-editor';
 }
